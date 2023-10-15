@@ -1,5 +1,9 @@
-# boilermake: A reusable, but flexible, boilerplate Makefile.
+# boilermake-cuda: An extension for 
+# Forked from boilermake: A reusable, but flexible boilerplate Makefile.
 #
+# Copyright 2023 Karolina Zyra
+#
+# Boilermake: https://github.com/dmoulding/boilermake 
 # Copyright 2008, 2009, 2010 Dan Moulding, Alan T. DeKok
 #
 # This program is free software: you can redistribute it and/or modify
@@ -129,6 +133,18 @@ define COMPILE_CXX_CMDS
 	 rm -f ${@:%$(suffix $@)=%.d}
 endef
 
+# COMPILE_CUDA_CMDS - Commands for compiling CUDA source code.
+define COMPILE_CUDA_CMDS
+	@mkdir -p $(dir $@)
+	$(strip ${NVCC} -o $@ -c -MD ${CUDAFLAGS} ${SRC_CUDAFLAGS} ${INCDIRS} \
+	    ${SRC_INCDIRS} ${SRC_DEFS} ${DEFS} $<)
+	@cp ${@:%$(suffix $@)=%.d} ${@:%$(suffix $@)=%.P}; \
+	 sed -e 's/#.*//' -e 's/^[^:]*: *//' -e 's/ *\\$$//' \
+	     -e '/^$$/ d' -e 's/$$/ :/' < ${@:%$(suffix $@)=%.d} \
+	     >> ${@:%$(suffix $@)=%.P}; \
+	 rm -f ${@:%$(suffix $@)=%.d}
+endef
+
 # INCLUDE_SUBMAKEFILE - Parameterized "function" that includes a new
 #   "submakefile" fragment into the overall Makefile. It also recursively
 #   includes all submakefiles of the specified submakefile fragment.
@@ -138,25 +154,27 @@ endef
 define INCLUDE_SUBMAKEFILE
     # Initialize all variables that can be defined by a makefile fragment, then
     # include the specified makefile fragment.
-    TARGET        :=
-    TGT_CFLAGS    :=
-    TGT_CXXFLAGS  :=
-    TGT_DEFS      :=
-    TGT_INCDIRS   :=
-    TGT_LDFLAGS   :=
-    TGT_LDLIBS    :=
-    TGT_LINKER    :=
-    TGT_POSTCLEAN :=
-    TGT_POSTMAKE  :=
-    TGT_PREREQS   :=
+    TARGET          :=
+    TGT_CFLAGS      :=
+    TGT_CXXFLAGS    :=
+    TGT_CUDAFLAGS   :=
+    TGT_DEFS        :=
+    TGT_INCDIRS     :=
+    TGT_LDFLAGS     :=
+    TGT_LDLIBS      :=
+    TGT_LINKER      :=
+    TGT_POSTCLEAN   :=
+    TGT_POSTMAKE    :=
+    TGT_PREREQS     :=
 
-    SOURCES       :=
-    SRC_CFLAGS    :=
-    SRC_CXXFLAGS  :=
-    SRC_DEFS      :=
-    SRC_INCDIRS   :=
+    SOURCES         :=
+    SRC_CFLAGS      :=
+    SRC_CXXFLAGS    :=
+    SRC_CUDAFLAGS   :=
+    SRC_DEFS        :=
+    SRC_INCDIRS     :=
 
-    SUBMAKEFILES  :=
+    SUBMAKEFILES    :=
 
     # A directory stack is maintained so that the correct paths are used as we
     # recursively include all submakefiles. Get the makefile's directory and
@@ -185,36 +203,44 @@ define INCLUDE_SUBMAKEFILE
         # makefile apply to this new target. Initialize the target's variables.
         TGT := $$(strip $${TARGET})
         ALL_TGTS += $${TGT}
-        $${TGT}_CFLAGS    := $${TGT_CFLAGS}
-        $${TGT}_CXXFLAGS  := $${TGT_CXXFLAGS}
-        $${TGT}_DEFS      := $${TGT_DEFS}
-        $${TGT}_DEPS      :=
-        TGT_INCDIRS       := $$(call QUALIFY_PATH,$${DIR},$${TGT_INCDIRS})
-        TGT_INCDIRS       := $$(call CANONICAL_PATH,$${TGT_INCDIRS})
-        $${TGT}_INCDIRS   := $${TGT_INCDIRS}
-        $${TGT}_LDFLAGS   := $${TGT_LDFLAGS}
-        $${TGT}_LDLIBS    := $${TGT_LDLIBS}
-        $${TGT}_LINKER    := $${TGT_LINKER}
-        $${TGT}_OBJS      :=
-        $${TGT}_POSTCLEAN := $${TGT_POSTCLEAN}
-        $${TGT}_POSTMAKE  := $${TGT_POSTMAKE}
-        $${TGT}_PREREQS   := $$(addprefix $${TARGET_DIR}/,$${TGT_PREREQS})
-        $${TGT}_SOURCES   :=
+
+        $${TGT}_CFLAGS      := $${TGT_CFLAGS}
+        $${TGT}_CXXFLAGS    := $${TGT_CXXFLAGS}
+        $${TGT}_CUDAFLAGS   := $${TGT_CUDAFLAGS}
+        $${TGT}_DEFS        := $${TGT_DEFS}
+        $${TGT}_DEPS        :=
+
+        TGT_INCDIRS         := $$(call QUALIFY_PATH,$${DIR},$${TGT_INCDIRS})
+        TGT_INCDIRS         := $$(call CANONICAL_PATH,$${TGT_INCDIRS})
+
+        $${TGT}_INCDIRS     := $${TGT_INCDIRS}
+        $${TGT}_LDFLAGS     := $${TGT_LDFLAGS}
+        $${TGT}_LDLIBS      := $${TGT_LDLIBS}
+        $${TGT}_LINKER      := $${TGT_LINKER}
+        $${TGT}_OBJS        :=
+        $${TGT}_POSTCLEAN   := $${TGT_POSTCLEAN}
+        $${TGT}_POSTMAKE    := $${TGT_POSTMAKE}
+        $${TGT}_PREREQS     := $$(addprefix $${TARGET_DIR}/,$${TGT_PREREQS})
+        $${TGT}_SOURCES     :=
     else
         # The values defined by this makefile apply to the the "current" target
         # as determined by which target is at the top of the stack.
         TGT := $$(strip $$(call PEEK,$${TGT_STACK}))
-        $${TGT}_CFLAGS    += $${TGT_CFLAGS}
-        $${TGT}_CXXFLAGS  += $${TGT_CXXFLAGS}
-        $${TGT}_DEFS      += $${TGT_DEFS}
-        TGT_INCDIRS       := $$(call QUALIFY_PATH,$${DIR},$${TGT_INCDIRS})
-        TGT_INCDIRS       := $$(call CANONICAL_PATH,$${TGT_INCDIRS})
-        $${TGT}_INCDIRS   += $${TGT_INCDIRS}
-        $${TGT}_LDFLAGS   += $${TGT_LDFLAGS}
-        $${TGT}_LDLIBS    += $${TGT_LDLIBS}
-        $${TGT}_POSTCLEAN += $${TGT_POSTCLEAN}
-        $${TGT}_POSTMAKE  += $${TGT_POSTMAKE}
-        $${TGT}_PREREQS   += $${TGT_PREREQS}
+
+        $${TGT}_CFLAGS      += $${TGT_CFLAGS}
+        $${TGT}_CXXFLAGS    += $${TGT_CXXFLAGS}
+        $${TGT}_CUDAFLAGS   += $${TGT_CUDAFLAGS}
+        $${TGT}_DEFS        += $${TGT_DEFS}
+
+        TGT_INCDIRS         := $$(call QUALIFY_PATH,$${DIR},$${TGT_INCDIRS})
+        TGT_INCDIRS         := $$(call CANONICAL_PATH,$${TGT_INCDIRS})
+
+        $${TGT}_INCDIRS     += $${TGT_INCDIRS}
+        $${TGT}_LDFLAGS     += $${TGT_LDFLAGS}
+        $${TGT}_LDLIBS      += $${TGT_LDLIBS}
+        $${TGT}_POSTCLEAN   += $${TGT_POSTCLEAN}
+        $${TGT}_POSTMAKE    += $${TGT_POSTMAKE}
+        $${TGT}_PREREQS     += $${TGT_PREREQS}
     endif
 
     # Push the current target onto the target stack.
@@ -325,9 +351,10 @@ ifneq "${MIN_MAKE_VERSION}" "$(call MIN,${MIN_MAKE_VERSION},${MAKE_VERSION})"
 endif
 
 # Define the source file extensions that we know how to handle.
-C_SRC_EXTS := %.c
-CXX_SRC_EXTS := %.C %.cc %.cp %.cpp %.CPP %.cxx %.c++
-ALL_SRC_EXTS := ${C_SRC_EXTS} ${CXX_SRC_EXTS}
+C_SRC_EXTS      := %.c
+CXX_SRC_EXTS    := %.C %.cc %.cp %.cpp %.CPP %.cxx %.c++
+CUDA_SRC_EXTS   := %.cu 
+ALL_SRC_EXTS    := ${C_SRC_EXTS} ${CXX_SRC_EXTS} ${CUDA_SRC_EXTS}
 
 # Initialize global variables.
 ALL_TGTS :=
@@ -364,6 +391,12 @@ $(foreach TGT,${ALL_TGTS},\
   $(foreach EXT,${CXX_SRC_EXTS},\
     $(eval $(call ADD_OBJECT_RULE,${BUILD_DIR}/$(call CANONICAL_PATH,${TGT}),\
              ${EXT},$${COMPILE_CXX_CMDS}))))
+
+# Add pattern rule(s) for creating compiled object code from CUDA source.
+$(foreach TGT,${ALL_TGTS},\
+  $(foreach EXT,${CUDA_SRC_EXTS},\
+    $(eval $(call ADD_OBJECT_RULE,${BUILD_DIR}/$(call CANONICAL_PATH,${TGT}),\
+             ${EXT},$${COMPILE_CUDA_CMDS}))))
 
 # Add "clean" rules to remove all build-generated files.
 .PHONY: clean
